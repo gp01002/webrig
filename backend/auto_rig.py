@@ -95,7 +95,7 @@ try:
         
         try:
             print("Blender: 嘗試自動權重綁定 (Automatic Weights)...")
-            bpy.ops.object.parent_set(type='ARMATURE_AUTO')
+            bpy.ops.object.parent_set(type='ARMATURE_ENVELOPE')
             print("Blender: 自動權重綁定成功")
         except Exception as e:
             print(f"Warning: 自動權重失敗 ({e})，嘗試切換為封套權重 (Envelope)...")
