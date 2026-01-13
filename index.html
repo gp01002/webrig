@@ -1,156 +1,569 @@
-<!doctype html>
-<html lang="zh-Hant">
+<!DOCTYPE html>
+<html lang="zh-TW">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>3D Model Viewer - Web Rig Studio</title>
-  
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
-  
-  <link rel="stylesheet" href="assets/css/style.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>AccuRig v27.0 Ultimate - 3D 舞台與全生物動作測試版</title>
+    <style>
+        :root {
+            --hi: #06ffa5;
+            --bg: #010208;
+            --ui-bg: rgba(12, 22, 55, 0.98);
+            --accent: #14b8ff;
+            --pelvis: #ff4d4d; --spine: #ff924d; --chest: #ffc94d;
+            --neck: #ffff4d; --head: #c9ff4d; --shoulder: #4dff4d;
+            --elbow: #4dffc9; --wrist: #4dffff; --hip: #4da6ff;
+            --knee: #4d4dff; --ankle: #a64dff;
+        }
+        * { box-sizing: border-box; }
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: var(--bg); color: white; font-family: 'Segoe UI', system-ui, sans-serif; }
 
-  <script type="importmap">
-    {
-      "imports": {
-        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
-      }
-    }
-  </script>
+        #step-bar {
+            position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
+            z-index: 100; display: flex; gap: 8px; align-items: center;
+            background: var(--ui-bg); padding: 10px 30px; border-radius: 40px;
+            border: 1px solid rgba(6, 255, 165, 0.3); box-shadow: 0 10px 40px rgba(0,0,0,0.8);
+        }
+        .step { font-size: 11px; padding: 6px 16px; border-radius: 20px; opacity: 0.3; transition: all 0.3s; white-space: nowrap; }
+        .step.active { opacity: 1; background: rgba(6, 255, 165, 0.2); color: var(--hi); font-weight: bold; border: 1px solid var(--hi); }
+
+        #guide-box {
+            position: fixed; top: 85px; left: 20px; background: rgba(0,0,0,0.92);
+            padding: 20px; border-radius: 15px; font-size: 13px; color: #eee;
+            border-left: 5px solid var(--accent); width: 320px; z-index: 200;
+            box-shadow: 0 15px 45px rgba(0,0,0,0.6); backdrop-filter: blur(10px);
+            max-height: 75vh; overflow-y: auto;
+        }
+
+        .anatomy-list { margin-top: 15px; padding: 0; list-style: none; font-size: 11px; }
+        .anatomy-item { 
+            padding: 10px; margin-bottom: 5px; border-radius: 6px; 
+            background: rgba(255,255,255,0.05); display: flex; justify-content: space-between; 
+            align-items: center; opacity: 0.5; cursor: pointer; transition: 0.2s;
+        }
+        .anatomy-item.current { opacity: 1; background: rgba(20, 184, 255, 0.25); border: 1px solid var(--accent); font-weight: bold; }
+        .anatomy-item.done { opacity: 0.8; border-right: 4px solid var(--hi); }
+
+        .ref-model-btn {
+            width: 100%; padding: 8px; margin: 3px 0; background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2); color: white; border-radius: 5px;
+            cursor: pointer; font-size: 11px; display: flex; align-items: center; gap: 8px;
+        }
+        .ref-model-btn.active { background: var(--hi); color: black; }
+
+        #controls {
+            position: fixed; bottom: 15px; left: 50%; transform: translateX(-50%);
+            z-index: 100; display: flex; gap: 10px; align-items: center;
+            background: var(--ui-bg); padding: 12px; border-radius: 20px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        #tool-mode-ui {
+            position: fixed; top: 85px; right: 20px; background: var(--ui-bg);
+            padding: 20px; border-radius: 15px; display: none; flex-direction: column; gap: 10px; z-index: 200;
+            border: 1px solid rgba(255,255,255,0.1); width: 220px;
+        }
+
+        .btn {
+            background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15);
+            color: white; padding: 10px 18px; border-radius: 12px; cursor: pointer;
+            font-size: 12px; transition: all 0.2s; white-space: nowrap; font-weight: 600;
+        }
+        .btn:hover:not(:disabled) { background: rgba(255,255,255,0.15); border-color: var(--hi); }
+        .btn.active { background: var(--hi); color: #000; }
+
+        #motion-library {
+            position: fixed; bottom: 85px; left: 50%; transform: translateX(-50%);
+            background: var(--ui-bg); padding: 12px; border-radius: 20px;
+            display: none; grid-template-columns: repeat(3, 1fr); gap: 8px; z-index: 150; border: 1px solid var(--hi);
+        }
+
+        #status-panel {
+            position: fixed; top: 15px; right: 20px; font-size: 10px; color: var(--accent); text-align: right; font-family: monospace;
+        }
+
+        .toast { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: var(--hi); color: black; padding: 10px 25px; border-radius: 30px; font-weight: bold; display: none; z-index: 1000; }
+    </style>
 </head>
 <body>
-  <div class="app">
-    <div class="panel">
-      <div class="panel-inner">
-        <div class="header">
-          <h1>WEB RIG STUDIO</h1>
-          <div class="subtitle">
-            專業 3D 模型查看器 - 支援 GLB/GLTF 格式，完整動畫控制與自動綁骨整合
-          </div>
+
+    <div id="step-bar">
+        <div id="step1" class="step active">1. 匯入</div>
+        <div id="step2" class="step">2. 參考與佈點</div>
+        <div id="step3" class="step">3. 執行綁定</div>
+        <div id="step4" class="step">4. 動作測試</div>
+    </div>
+
+    <div id="status-panel">
+        STATUS: <span id="status-text">待機中</span><br>
+        JOINTS: <span id="bone-count">0</span>
+    </div>
+
+    <div id="guide-box">
+        <div id="guide-title" style="font-weight: bold; color: var(--accent); margin-bottom: 5px;">📍 骨架導覽</div>
+        <div id="guide-content">請匯入模型。</div>
+        
+        <!-- 參考模型選擇 (新版優點加入) -->
+        <div id="reference-selector" style="display:none; margin:10px 0; border-top:1px solid rgba(255,255,255,0.1); padding-top:10px;">
+            <div style="font-size:10px; opacity:0.7; margin-bottom:5px;">🔍 選擇參考模型：</div>
+            <button class="ref-model-btn active" data-ref="none">❌ 無參考</button>
+            <button class="ref-model-btn" data-ref="human">🚶 人類</button>
+            <button class="ref-model-btn" data-ref="dog">🐕 四足 (犬/貓)</button>
+            <button class="ref-model-btn" data-ref="bird">🦅 鳥類 (飛行)</button>
         </div>
 
-        <div class="section">
-          <div class="section-title">
-            <span>模型載入</span>
-          </div>
-          <div class="control">
-            <label>選擇 3D 模型檔案</label>
-            <label for="file" class="file-upload-btn" id="fileLabel">
-              📁 點擊選擇 .glb 或 .gltf 檔案
-            </label>
-            <input id="file" type="file" accept=".glb,.gltf" />
-            <div class="hint">
-              建議使用 .glb 格式（單一檔案，包含所有資源）
-            </div>
-          </div>
-          <div class="control">
-            <button id="btnReset" class="secondary" disabled>🎯 重置視角</button>
-          </div>
+        <ul id="anatomy-guide" class="anatomy-list" style="display:none;"></ul>
+        
+        <div id="nav-btns" style="display:none; margin-top:15px; display:flex; gap:5px;">
+            <button class="btn" style="flex:1; padding:8px;" id="btn-undo">↺ 撤銷</button>
+            <button class="btn" style="flex:1; padding:8px; display:none;" id="btn-confirm-dots">綁定綁定 ➔</button>
         </div>
+    </div>
 
-        <div class="divider"></div>
-
-        <div class="section">
-          <div class="section-title">
-            <span>動畫控制</span>
-          </div>
-          <div class="control">
-            <label>選擇動畫片段</label>
-            <select id="clipSelect" disabled>
-              <option>等待載入模型...</option>
-            </select>
-          </div>
-          <div class="control">
-            <label>
-              播放速度
-              <span class="badge" id="speedVal">1.00x</span>
-            </label>
-            <div class="range-container">
-              <input id="speed" type="range" min="0.1" max="2.0" step="0.05" value="1.0" disabled />
-            </div>
-          </div>
-          <div class="control-group">
-            <button id="btnPlay" disabled>▶️ 播放</button>
-            <button id="btnStop" class="secondary" disabled>⏹️ 停止</button>
-          </div>
+    <div id="tool-mode-ui">
+        <div style="font-size:11px; color:var(--accent); font-weight:bold; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:5px;">骨骼權重微調</div>
+        <div id="cur-bone-name" style="font-size:12px; color:var(--hi);">選取物件: -</div>
+        <div style="display:flex; flex-direction:column; gap:8px; margin-top:5px;">
+            <button class="btn mode-btn active" data-mode="translate">✥ 移動位置</button>
+            <button class="btn mode-btn" data-mode="scale">◎ 影響範圍</button>
         </div>
-
-        <div class="divider"></div>
-
-        <div class="section">
-          <div class="section-title">
-            <span>模型資訊</span>
-          </div>
-          <div class="info-grid">
-            <div class="info-item">
-              <div class="info-label">檔案名稱</div>
-              <div class="info-value" id="infoName">-</div>
-            </div>
-            <div class="info-item">
-              <div class="info-label">動畫數量</div>
-              <div class="info-value" id="infoAnims">-</div>
-            </div>
-            <div class="info-item">
-              <div class="info-label">骨架綁定</div>
-              <div class="info-value" id="infoSkinned">-</div>
-            </div>
-            <div class="info-item">
-              <div class="info-label">網格數量</div>
-              <div class="info-value" id="infoMeshes">-</div>
-            </div>
-          </div>
+        <div style="font-size:10px; opacity:0.7; margin-top:10px;">衰減模式：</div>
+        <div style="display:flex; gap:3px;">
+            <button class="btn type-btn" data-type="sphere">球形</button>
+            <button class="btn type-btn" data-type="upward">向上</button>
+            <button class="btn type-btn" data-type="downward">向下</button>
         </div>
+    </div>
 
-        <div class="divider"></div>
+    <div id="motion-library">
+        <button class="btn motion-btn active" data-motion="none">停止</button>
+        <button class="btn motion-btn" data-motion="idle">呼吸</button>
+        <button class="btn motion-btn" data-motion="walk">走路</button>
+        <button class="btn motion-btn" data-motion="wave">揮手</button>
+        <button class="btn motion-btn" data-motion="quadruped">🐾 四足</button>
+        <button class="btn motion-btn" data-motion="fly">🦅 飛行</button>
+    </div>
 
-        <div class="section">
-          <div class="section-title">
-            <span>自動綁骨 (Backend API)</span>
-          </div>
-          <div class="control">
-            <label>API 伺服器網址 (ngrok)</label>
-            <input type="text" id="apiUrl" placeholder="https://xxxx.ngrok-free.app" 
-                   class="api-input">
+    <div id="controls">
+        <label for="file-input" class="btn active" id="label-import">📂 匯入模型</label>
+        <input type="file" id="file-input" accept=".glb,.gltf" style="display:none;">
+        <button id="btn-confirm-final" class="btn" style="display:none; background:var(--hi); color:#000;">🤖 執行綁定 ➔</button>
+        <button id="btn-export" class="btn" style="display:none; background:var(--accent); color:#fff;">💾 匯出成品</button>
+        <button id="btn-reset" class="btn">🔄 重置</button>
+    </div>
+
+    <div id="toast-msg" class="toast"></div>
+
+    <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+      }
+    }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { TransformControls } from 'three/addons/controls/TransformControls.js';
+        import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+
+        let scene, camera, renderer, orbitControls, transformControl;
+        let modelGroup, currentModel, referenceGroup = new THREE.Group();
+        let bones = [], boneMap = new Map();
+        let jointMarkers = new THREE.Group();
+        let boneLines = new THREE.Group();
+        let stageBox = new THREE.Group(); 
+        let anatomyIndex = 0, currentStep = 1, activeMotion = 'none';
+        let customParent = null;
+
+        const anatomySteps = [
+            { id: "Pelvis", parent: null, center: true, color: "#ff4d4d", type: 'sphere', range: 0.8 },
+            { id: "Spine", parent: "Pelvis", center: true, color: "#ff924d", type: 'upward', range: 0.7 },
+            { id: "Chest", parent: "Spine", center: true, color: "#ffc94d", type: 'upward', range: 0.8 },
+            { id: "Neck", parent: "Chest", center: true, color: "#ffff4d", type: 'upward', range: 0.5 },
+            { id: "Head", parent: "Neck", center: true, color: "#c9ff4d", type: 'sphere', range: 0.4 },
+            { id: "Shoulder", parent: "Chest", center: false, color: "#4dff4d", type: 'downward', range: 0.6 },
+            { id: "Elbow", parent: "Shoulder", center: false, color: "#4dffc9", type: 'downward', range: 0.5 },
+            { id: "Wrist", parent: "Elbow", center: false, color: "#4dffff", type: 'sphere', range: 0.3 },
+            { id: "Hip", parent: "Pelvis", center: false, color: "#4da6ff", type: 'downward', range: 0.8 },
+            { id: "Knee", parent: "Hip", center: false, color: "#4d4dff", type: 'downward', range: 0.7 },
+            { id: "Ankle", parent: "Knee", center: false, color: "#a64dff", type: 'sphere', range: 0.3 }
+        ];
+
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x010204);
+            camera = new THREE.PerspectiveCamera(40, window.innerWidth/window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 1.5, 14); 
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            document.body.appendChild(renderer.domElement);
+
+            scene.add(new THREE.AmbientLight(0xffffff, 1.2));
+            const sun = new THREE.DirectionalLight(0xffffff, 1.0);
+            sun.position.set(5, 10, 5); scene.add(sun);
+
+            modelGroup = new THREE.Group();
+            scene.add(modelGroup, jointMarkers, boneLines, stageBox, referenceGroup);
+
+            createStageBox(); 
+
+            orbitControls = new OrbitControls(camera, renderer.domElement);
+            orbitControls.enableDamping = true;
+
+            transformControl = new TransformControls(camera, renderer.domElement);
+            transformControl.size = 0.6;
             
-            <button id="btnUpload" disabled>🚀 上傳並自動綁骨</button>
-            <div class="hint">
-              請輸入 Google Colab 產生的 Ngrok 網址
-            </div>
-          </div>
-        </div>
+            transformControl.addEventListener('change', (e) => {
+                updateVisuals();
+                const obj = transformControl.object;
+                if (obj && obj.userData && obj.userData.mirrorPartner && transformControl.dragging) {
+                    const partner = obj.userData.mirrorPartner;
+                    partner.position.set(-obj.position.x, obj.position.y, obj.position.z);
+                    partner.scale.copy(obj.scale);
+                }
+            });
 
-        <div class="divider"></div>
+            transformControl.addEventListener('dragging-changed', (e) => { orbitControls.enabled = !e.value; });
+            scene.add(transformControl);
 
-        <div class="control">
-          <div class="status" id="status">
-            等待載入 3D 模型
-          </div>
-        </div>
-      </div>
-    </div>
+            window.addEventListener('resize', onResize);
+            setupUI();
+            buildAnatomyList();
+            animate();
+        }
 
-    <div class="viewer">
-      <canvas id="c"></canvas>
-      <div class="spinner" id="spinner"></div>
-      <div class="overlay">
-        <div class="chip">
-          <span class="chip-icon"></span>
-          <span id="chipInfo">未載入模型</span>
-        </div>
-        <div class="chip">
-          <span class="chip-icon"></span>
-          <span id="chipAnim">動畫: 無</span>
-        </div>
-        <div class="chip">
-          <span class="chip-icon"></span>
-          <span id="chipSkinned">骨架: 無</span>
-        </div>
-      </div>
-    </div>
-  </div>
+        // [核心功能]：無重疊高對比舞台箱
+        function createStageBox() {
+            stageBox.clear();
+            const width = 12, height = 5.5, depth = 5.5;
+            const gridColor = 0xffffff; 
+            const boxGeo = new THREE.BoxGeometry(width * 2, height * 2, depth * 2);
+            const boxHelper = new THREE.BoxHelper(new THREE.Mesh(boxGeo), gridColor);
+            boxHelper.material.transparent = true; boxHelper.material.opacity = 0.8; boxHelper.material.depthWrite = false;
+            stageBox.add(boxHelper);
 
-  <script type="module" src="assets/js/main.js"></script>
+            function createCleanGrid(w, h, divisions, rotation, position) {
+                const material = new THREE.LineBasicMaterial({ color: gridColor, transparent: true, opacity: 0.5, depthWrite: false });
+                const currentW = w - 0.1, currentH = h - 0.1;
+                const geometry = new THREE.BufferGeometry();
+                const points = [];
+                for (let i = 0; i <= divisions; i++) {
+                    const z = (i / divisions) * currentH - currentH / 2;
+                    points.push(-currentW / 2, 0, z, currentW / 2, 0, z);
+                }
+                for (let i = 0; i <= divisions; i++) {
+                    const x = (i / divisions) * currentW - currentW / 2;
+                    points.push(x, 0, -currentH / 2, x, 0, currentH / 2);
+                }
+                geometry.setAttribute('position', new THREE.Float32BufferAttribute(points, 3));
+                const line = new THREE.LineSegments(geometry, material);
+                if (rotation) line.rotation.copy(rotation);
+                if (position) line.position.copy(position);
+                return line;
+            }
+            stageBox.add(createCleanGrid(width * 2, depth * 2, 20, null, new THREE.Vector3(0, -height, 0)));
+            stageBox.add(createCleanGrid(width * 2, depth * 2, 20, null, new THREE.Vector3(0, height, 0)));
+            stageBox.add(createCleanGrid(width * 2, height * 2, 20, new THREE.Euler(Math.PI / 2, 0, 0), new THREE.Vector3(0, 0, -depth)));
+            stageBox.add(createCleanGrid(depth * 2, height * 2, 10, new THREE.Euler(0, 0, Math.PI / 2), new THREE.Vector3(-width, 0, 0)));
+            stageBox.add(createCleanGrid(depth * 2, height * 2, 10, new THREE.Euler(0, 0, Math.PI / 2), new THREE.Vector3(width, 0, 0)));
+        }
+
+        function buildAnatomyList() {
+            const list = document.getElementById('anatomy-guide');
+            list.innerHTML = "";
+            anatomySteps.forEach((s, i) => {
+                const li = document.createElement('li');
+                li.className = 'anatomy-item' + (i === 0 ? ' current' : '');
+                li.innerHTML = `<span><span class="joint-dot" style="background:${s.color}"></span>${i+1}. ${s.id}</span>`;
+                li.onclick = () => selectAnatomyStep(i);
+                list.appendChild(li);
+            });
+        }
+
+        function selectAnatomyStep(idx) {
+            anatomyIndex = idx;
+            document.querySelectorAll('.anatomy-item').forEach((item, i) => {
+                item.classList.toggle('current', i === idx);
+            });
+            const bone = boneMap.get(anatomySteps[idx].id);
+            if (bone) { transformControl.attach(bone); updateToolUI(bone); }
+            else { transformControl.detach(); }
+        }
+
+        function setupUI() {
+            document.getElementById('file-input').onchange = handleFileUpload;
+            document.getElementById('btn-confirm-final').onclick = performProfessionalSkinning;
+            document.getElementById('btn-export').onclick = exportGLB;
+            document.getElementById('btn-reset').onclick = () => location.reload();
+            document.getElementById('btn-undo').onclick = undoLastStep;
+
+            document.querySelectorAll('.mode-btn').forEach(btn => {
+                btn.onclick = () => {
+                    document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active'); transformControl.setMode(btn.dataset.mode);
+                };
+            });
+
+            document.querySelectorAll('.type-btn').forEach(btn => {
+                btn.onclick = () => {
+                    const bone = transformControl.object;
+                    if (!bone) return;
+                    document.querySelectorAll('.type-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active'); bone.userData.influenceType = btn.dataset.type;
+                    if (bone.userData.mirrorPartner) bone.userData.mirrorPartner.userData.influenceType = btn.dataset.type;
+                    showToast(`模式：${btn.innerText}`);
+                };
+            });
+
+            document.querySelectorAll('.ref-model-btn').forEach(btn => {
+                btn.onclick = () => {
+                    document.querySelectorAll('.ref-model-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active'); createReferenceSkeleton(btn.dataset.ref);
+                };
+            });
+
+            document.querySelectorAll('.motion-btn').forEach(btn => {
+                btn.onclick = () => {
+                    document.querySelectorAll('.motion-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active'); activeMotion = btn.dataset.motion;
+                };
+            });
+
+            renderer.domElement.addEventListener('mousedown', onSceneMouseDown);
+            renderer.domElement.addEventListener('dblclick', onSceneDoubleClick);
+        }
+
+        // [參考模型建立]：人、犬、鳥的幻影參考
+        function createReferenceSkeleton(type) {
+            referenceGroup.clear();
+            if (type === 'none') return;
+            const mat = new THREE.MeshBasicMaterial({ color: 0x4488ff, transparent: true, opacity: 0.3, wireframe: true });
+            if (type === 'human') {
+                const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.8, 4), mat); body.position.y = 2.5;
+                referenceGroup.add(body);
+            } else if (type === 'dog') {
+                const body = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.5, 4), mat); body.position.y = 2;
+                referenceGroup.add(body);
+            } else if (type === 'bird') {
+                const body = new THREE.Mesh(new THREE.SphereGeometry(1.2), mat); body.scale.set(1, 0.8, 1.5); body.position.y = 3;
+                referenceGroup.add(body);
+            }
+        }
+
+        function onSceneDoubleClick(e) {
+            const raycaster = new THREE.Raycaster();
+            const mouse = new THREE.Vector2((e.clientX/window.innerWidth)*2-1, -(e.clientY/window.innerHeight)*2+1);
+            raycaster.setFromCamera(mouse, camera);
+            const markerHits = raycaster.intersectObjects(jointMarkers.children, true);
+            if (markerHits.length > 0) {
+                let obj = markerHits[0].object;
+                while (obj && !obj.userData.bone) obj = obj.parent;
+                if (obj) {
+                    jointMarkers.children.forEach(m => m.children[0].material.emissive.set(0x000000));
+                    customParent = obj.userData.bone;
+                    obj.children[0].material.emissive.set(0xff0000); obj.children[0].material.emissiveIntensity = 1.0;
+                    showToast(`連線起始點：${customParent.name}`);
+                }
+            }
+        }
+
+        function onSceneMouseDown(e) {
+            if (e.button !== 0 || currentStep !== 2) return;
+            const raycaster = new THREE.Raycaster();
+            const mouse = new THREE.Vector2((e.clientX/window.innerWidth)*2-1, -(e.clientY/window.innerHeight)*2+1);
+            raycaster.setFromCamera(mouse, camera);
+            const markerHits = raycaster.intersectObjects(jointMarkers.children, true);
+            let hitTarget = null;
+            if (markerHits.length > 0) {
+                for (let hit of markerHits) {
+                    if (hit.object.name === "influenceUI") continue;
+                    let obj = hit.object; while (obj && !obj.userData.bone) obj = obj.parent;
+                    if (obj) { hitTarget = obj.userData.bone; break; }
+                }
+            }
+            if (hitTarget) { transformControl.attach(hitTarget); updateToolUI(hitTarget); }
+            else if (!transformControl.dragging) {
+                const hits = raycaster.intersectObject(modelGroup, true);
+                if (hits.length > 0) placeBoneInside(hits[0]);
+            }
+        }
+
+        function placeBoneInside(hit) {
+            const config = anatomySteps[anatomyIndex];
+            if (!config) return;
+            let worldPos = hit.point.clone();
+            const raycaster = new THREE.Raycaster();
+            const dir = hit.face.normal.clone().applyQuaternion(hit.object.getWorldQuaternion(new THREE.Quaternion())).negate();
+            const rayOrigin = hit.point.clone().add(dir.clone().multiplyScalar(0.01));
+            raycaster.set(rayOrigin, dir);
+            const backHits = raycaster.intersectObject(hit.object);
+            if (backHits.length > 0) worldPos.add(backHits[0].point).multiplyScalar(0.5);
+            else worldPos.add(dir.multiplyScalar(0.2));
+            if (config.center) worldPos.x = 0;
+
+            let mainBone = boneMap.get(config.id);
+            if (!mainBone) {
+                const parent = customParent || (config.parent ? boneMap.get(config.parent) : null);
+                mainBone = createBoneAt(worldPos, parent, config);
+                boneMap.set(config.id, mainBone);
+                if (!config.center) {
+                    const mirrorPos = new THREE.Vector3(-worldPos.x, worldPos.y, worldPos.z);
+                    const mirrorParent = customParent ? (customParent.userData.mirrorPartner || customParent) : 
+                                        (config.parent ? (boneMap.get("R_" + config.parent) || boneMap.get(config.parent)) : null);
+                    const mirrorBone = createBoneAt(mirrorPos, mirrorParent, {...config, id: "R_"+config.id});
+                    boneMap.set("R_" + config.id, mirrorBone);
+                    mainBone.userData.mirrorPartner = mirrorBone; mirrorBone.userData.mirrorPartner = mainBone;
+                }
+            }
+            transformControl.attach(mainBone); updateToolUI(mainBone); customParent = null; 
+            const items = document.querySelectorAll('.anatomy-item'); items[anatomyIndex].classList.add('done');
+            if (anatomyIndex < anatomySteps.length - 1 && !boneMap.get(anatomySteps[anatomyIndex+1].id)) selectAnatomyStep(anatomyIndex + 1);
+            else if (boneMap.size >= 11) document.getElementById('btn-confirm-final').style.display = 'block';
+        }
+
+        function createBoneAt(worldPos, parent, config) {
+            const bone = new THREE.Bone(); bone.name = config.id;
+            bone.userData = { influenceType: config.type, range: config.range, color: config.color };
+            const actualParent = parent || modelGroup;
+            actualParent.updateMatrixWorld(true);
+            bone.position.copy(actualParent.worldToLocal(worldPos.clone()));
+            actualParent.add(bone); bones.push(bone);
+            const marker = new THREE.Group();
+            marker.add(new THREE.Mesh(new THREE.SphereGeometry(0.1, 16, 16), new THREE.MeshStandardMaterial({ color: config.color, emissive: 0x000000 })));
+            const influence = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 16), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.05, wireframe: true }));
+            influence.name = "influenceUI"; influence.raycast = () => null; marker.add(influence);
+            marker.userData.bone = bone; jointMarkers.add(marker);
+            if (actualParent instanceof THREE.Bone) {
+                const line = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0xffff00, transparent: true, opacity: 0.85 }));
+                line.userData = { from: actualParent, to: bone }; boneLines.add(line);
+            }
+            return bone;
+        }
+
+        function performProfessionalSkinning() {
+            transformControl.detach(); document.getElementById('status-text').textContent = "權重綁定中...";
+            const meshes = []; currentModel.traverse(n => { if (n.isMesh) meshes.push(n); });
+            meshes.forEach(mesh => {
+                const geometry = mesh.geometry.clone(); const pos = geometry.attributes.position;
+                const skinIndices = [], skinWeights = [];
+                for (let i = 0; i < pos.count; i++) {
+                    const v = new THREE.Vector3().fromBufferAttribute(pos, i); mesh.localToWorld(v);
+                    let influences = bones.map((bone, idx) => {
+                        const bPos = bone.getWorldPosition(new THREE.Vector3());
+                        const type = bone.userData.influenceType || 'sphere';
+                        const range = bone.userData.range * bone.scale.x; let weight = 0;
+                        const dist = v.distanceTo(bPos);
+                        if (type === 'sphere') weight = Math.max(0, 1 - dist/range);
+                        else if (type === 'upward') weight = (v.y >= bPos.y-0.1) ? Math.max(0, 1 - dist/range) * (1.2 + (v.y-bPos.y)/range) : 0;
+                        else if (type === 'downward') weight = (v.y <= bPos.y+0.1) ? Math.max(0, 1 - dist/range) * (1.2 + (bPos.y-v.y)/range) : 0;
+                        return { idx, w: Math.pow(weight, 4) };
+                    });
+                    influences.sort((a, b) => b.w - a.w);
+                    const top = influences.slice(0, 4); const totalW = top.reduce((s, x) => s + x.w, 0) || 1;
+                    top.forEach(x => { skinIndices.push(x.idx); skinWeights.push(x.w / totalW); });
+                    while(skinIndices.length % 4 !== 0) { skinIndices.push(0); skinWeights.push(0); }
+                }
+                geometry.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(skinIndices, 4));
+                geometry.setAttribute('skinWeight', new THREE.Float32BufferAttribute(skinWeights, 4));
+                const skinnedMesh = new THREE.SkinnedMesh(geometry, mesh.material);
+                skinnedMesh.bind(new THREE.Skeleton(bones), new THREE.Matrix4());
+                scene.add(skinnedMesh); mesh.parent.remove(mesh);
+            });
+            setStep(4);
+        }
+
+        function setStep(n) {
+            transformControl.detach(); currentStep = n;
+            document.querySelectorAll('.step').forEach((el, i) => el.classList.toggle('active', (i+1)===n));
+            document.getElementById('anatomy-guide').style.display = (n===2) ? 'block' : 'none';
+            document.getElementById('reference-selector').style.display = (n===2) ? 'block' : 'none';
+            document.getElementById('nav-btns').style.display = (n===2) ? 'flex' : 'none';
+            document.getElementById('tool-mode-ui').style.display = (n===2) ? 'flex' : 'none';
+            document.getElementById('btn-confirm-final').style.display = (n===2 && boneMap.size >= 11) ? 'block' : 'none';
+            document.getElementById('btn-export').style.display = (n===4) ? 'block' : 'none';
+            document.getElementById('motion-library').style.display = (n===4) ? 'grid' : 'none';
+            if (n===4) { transformControl.setMode('rotate'); jointMarkers.children.forEach(m => m.getObjectByName("influenceUI").visible = false); }
+        }
+
+        function handleFileUpload(e) {
+            const file = e.target.files[0]; if (!file) return;
+            transformControl.detach(); const url = URL.createObjectURL(file);
+            new GLTFLoader().load(url, (gltf) => {
+                if (currentModel) modelGroup.remove(currentModel);
+                bones.forEach(b => { if(b.parent) b.parent.remove(b); });
+                bones = []; boneMap.clear(); jointMarkers.clear(); boneLines.clear(); anatomyIndex = 0;
+                currentModel = gltf.scene;
+                const box = new THREE.Box3().setFromObject(currentModel);
+                const size = box.getSize(new THREE.Vector3()); const scale = 9 / Math.max(size.x, size.y, size.z);
+                currentModel.traverse(n => { if (n.isMesh) { n.geometry.center(); n.geometry.scale(scale, scale, scale); n.position.set(0,0,0); n.rotation.set(0,0,0); } });
+                currentModel.position.set(0, (size.y * scale / 2) - 4, 0);
+                modelGroup.add(currentModel); setStep(2); URL.revokeObjectURL(url);
+            });
+        }
+
+        function undoLastStep() {
+            transformControl.detach();
+            const keys = Array.from(boneMap.keys()); const lastKey = keys[keys.length - 1];
+            if (lastKey) {
+                const b = boneMap.get(lastKey); const partner = b.userData.mirrorPartner;
+                if(b.parent) b.parent.remove(b); if(partner && partner.parent) partner.parent.remove(partner);
+                bones = bones.filter(x => x !== b && x !== partner); boneMap.delete(lastKey); boneMap.delete("R_" + lastKey);
+                anatomyIndex = Math.max(0, anatomyIndex - 1);
+            }
+            refreshVisuals();
+        }
+
+        function refreshVisuals() {
+            jointMarkers.clear(); boneLines.clear();
+            const tempBones = [...bones]; bones = [];
+            tempBones.forEach(b => createBoneAt(b.getWorldPosition(new THREE.Vector3()), (b.parent instanceof THREE.Bone ? b.parent : null), {id: b.name, color: b.userData.color, type: b.userData.influenceType, range: b.userData.range}));
+        }
+
+        function updateToolUI(bone) { document.getElementById('cur-bone-name').textContent = "選取物件: " + bone.name; }
+        function updateVisuals() {
+            jointMarkers.children.forEach(m => { if (m.userData.bone) { const wp = new THREE.Vector3(); m.userData.bone.getWorldPosition(wp); m.position.copy(wp); m.getObjectByName("influenceUI").scale.setScalar(m.userData.bone.scale.x); } });
+            boneLines.children.forEach(l => { if(l.userData.from && l.userData.to){ const p1 = new THREE.Vector3(), p2 = new THREE.Vector3(); l.userData.from.getWorldPosition(p1); l.userData.to.getWorldPosition(p2); l.geometry.setFromPoints([p1, p2]); } });
+        }
+
+        function exportGLB() {
+            const targets = []; scene.traverse(n => { if (n.isSkinnedMesh) targets.push(n); });
+            new GLTFExporter().parse(targets, (res) => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([res], { type: 'application/octet-stream' })); a.download = 'Stage_Rigged_v27.glb'; a.click(); }, { binary: true });
+        }
+
+        function showToast(m) { const t = document.getElementById('toast-msg'); t.textContent = m; t.style.display = 'block'; setTimeout(() => t.style.display = 'none', 3000); }
+        function onResize() { camera.aspect = window.innerWidth/window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth,window.innerHeight); }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            if (transformControl.object && !transformControl.object.parent) transformControl.detach();
+            if (activeMotion !== 'none' && bones.length > 0) {
+                const t = Date.now() * 0.003;
+                bones.forEach(b => {
+                    const phase = b.name.includes('R_') ? Math.PI : 0;
+                    if (activeMotion === 'idle' && (b.name === 'Spine' || b.name === 'Chest')) b.rotation.x = Math.sin(t) * 0.05;
+                    else if (activeMotion === 'wave' && b.name.includes('Shoulder')) b.rotation.z = Math.sin(t*2) * 0.5 + 0.6;
+                    else if (activeMotion === 'walk') {
+                        if (b.name.includes('Hip')) b.rotation.x = Math.sin(t*2 + phase) * 0.4;
+                        if (b.name.includes('Knee')) b.rotation.x = Math.abs(Math.sin(t*2 + phase)) * 0.6;
+                    } else if (activeMotion === 'quadruped') {
+                        if (b.name.includes('Hip')) b.rotation.x = Math.sin(t*2 + phase) * 0.4;
+                        if (b.name.includes('Shoulder')) b.rotation.x = Math.sin(t*2 + phase + Math.PI) * 0.4;
+                        if (b.name.includes('Knee') || b.name.includes('Elbow')) b.rotation.x = Math.abs(Math.sin(t*2 + phase)) * 0.3;
+                    } else if (activeMotion === 'fly') {
+                        if (b.name.includes('Shoulder')) b.rotation.z = Math.sin(t*3) * 0.8;
+                        if (b.name.includes('Elbow')) b.rotation.z = Math.sin(t*3 - 0.5) * 0.4;
+                    }
+                });
+            }
+            orbitControls.update(); renderer.render(scene, camera);
+        }
+        init();
+    </script>
 </body>
 </html>
